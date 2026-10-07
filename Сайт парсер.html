@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Трекинг загрузки ФБС на региональные склады</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f0f2f5;
+    color: #1a1a1a;
+    padding: 20px;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+
+  header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    padding: 24px 32px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  header h1 { font-size: 22px; font-weight: 600; }
+  header .subtitle { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .kpi {
+    background: #fff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-left: 4px solid #667eea;
+  }
+  .kpi-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+  .kpi-value { font-size: 28px; font-weight: 700; margin-top: 6px; color: #1a1a1a; }
+  .kpi-sub { font-size: 12px; color: #999; margin-top: 4px; }
+  .kpi.warn { border-left-color: #f59e0b; }
+  .kpi.danger { border-left-color: #ef4444; }
+  .kpi.success { border-left-color: #10b981; }
+
+  .panel {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    margin-bottom: 24px;
+  }
+  .panel h2 {
+    font-size: 16px;
+    margin-bottom: 16px;
+    color: #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    align-items: center;
+  }
+  .toolbar input, .toolbar select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+  }
+  .toolbar input:focus, .toolbar select:focus { border-color: #667eea; }
+  .btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: #667eea; color: #fff; }
+  .btn-primary:hover { background: #5568d3; }
+  .btn-ghost { background: #f0f2f5; color: #333; }
+  .btn-ghost:hover { background: #e2e5ea; }
+  .btn-danger { background: #ef4444; color: #fff; }
+  .btn-danger:hover { background: #dc2626; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  thead th {
+    text-align: left;
+    padding: 10px 12px;
+    background: #f8f9fb;
+    color: #555;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-bottom: 1px solid #e5e7eb;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  thead th:hover { background: #eef0f4; }
+  tbody td {
+    padding: 12px;
+    border-bottom: 1px solid #f0f2f5;
+    vertical-align: middle;
+  }
+  tbody tr:hover { background: #fafbfc; }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .badge-green { background: #d1fae5; color: #065f46; }
+  .badge-yellow { background: #fef3c7; color: #92400e; }
+  .badge-red { background: #fee2e2; color: #991b1b; }
+  .badge-blue { background: #dbeafe; color: #1e40af; }
+  .badge-gray { background: #e5e7eb; color: #374151; }
+
+  .progress {
+    width: 100%;
+    height: 8px;
+    background: #eef0f4;
+    border-radius: 4px;
+    overflow: hidden;
+    min-width: 100px;
+  }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 4px;
+    transition: width 0.3s;
+  }
+  .progress-bar.warn { background: linear-gradient(90deg, #f59e0b, #f97316); }
+  .progress-bar.danger { background: linear-gradient(90deg, #ef4444, #dc2626); }
+  .progress-bar.success { background: linear-gradient(90deg, #10b981, #059669); }
+
+  .actions { display: flex; gap: 6px; }
+
+  /* Модальное окно */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 12px;
+    padding: 28px;
+    max-width: 520px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal h3 { margin-bottom: 20px; font-size: 18px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label {
+    display: block;
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    border-color: #667eea;
+  }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 24px;
+  }
+
+  .empty {
+    text-align: center;
+    padding: 40px;
+    color: #999;
+  }
+
+  @media (max-width: 768px) {
+    table { font-size: 12px; }
+    thead th, tbody td { padding: 8px 6px; }
+    .kpi-value { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div>
+      <h1>📦 Трекинг загрузки ФБС</h1>
+      <div class="subtitle">Мониторинг отгрузок на региональные склады</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-ghost" onclick="exportCSV()">⬇ Экспорт CSV</button>
+      <button class="btn btn-primary" onclick="openModal()">+ Добавить отгрузку</button>
+    </div>
+  </header>
+
+  <!-- KPI -->
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <!-- Панель с таблицей -->
+  <div class="panel">
+    <h2>Отгрузки <span id="countLabel" style="font-weight:400;color:#999;font-size:13px;"></span></h2>
+
+    <div class="toolbar">
+      <input type="text" id="searchInput" placeholder="🔍 Поиск по складу, SKU, номеру..." style="flex:1;min-width:200px;">
+      <select id="filterStatus">
+        <option value="">Все статусы</option>
+        <option value="Ожидает">Ожидает</option>
+        <option value="В пути">В пути</option>
+        <option value="Прибыл">Прибыл</option>
+        <option value="Принят">Принят</option>
+        <option value="Задержка">Задержка</option>
+      </select>
+      <select id="filterWarehouse">
+        <option value="">Все склады</option>
+      </select>
+      <button class="btn btn-ghost" onclick="resetFilters()">Сбросить</button>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortBy('id')">№</th>
+            <th onclick="sortBy('warehouse')">Склад</th>
+            <th onclick="sortBy('region')">Регион</th>
+            <th onclick="sortBy('sku')">SKU / Товар</th>
+            <th onclick="sortBy('qty')">Кол-во</th>
+            <th onclick="sortBy('shipped')">Отгружено</th>
+            <th onclick="sortBy('progress')">Прогресс</th>
+            <th onclick="sortBy('eta')">ETA</th>
+            <th onclick="sortBy('status')">Статус</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div id="emptyState" class="empty" style="display:none;">Нет данных для отображения</div>
+  </div>
+</div>
+
+<!-- Модальное окно -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Добавить отгрузку</h3>
+    <input type="hidden" id="editId">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Регион *</label>
+        <input type="text" id="fRegion" placeholder="Напр., Сибирь">
+      </div>
+      <div class="form-group">
+        <label>Склад *</label>
+        <input type="text" id="fWarehouse" placeholder="Напр., Новосибирск-1">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>SKU / Товар *</label>
+      <input type="text" id="fSku" placeholder="Напр., ФБС-24.4.6">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Плановое кол-во *</label>
+        <input type="number" id="fQty" min="0" placeholder="1000">
+      </div>
+      <div class="form-group">
+        <label>Отгружено</label>
+        <input type="number" id="fShipped" min="0" value="0" placeholder="0">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Дата отгрузки</label>
+        <input type="date" id="fShipDate">
+      </div>
+      <div class="form-group">
+        <label>ETA (ожидаемое прибытие)</label>
+        <input type="date" id="fEta">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Статус</label>
+      <select id="fStatus">
+        <option value="Ожидает">Ожидает</option>
+        <option value="В пути">В пути</option>
+        <option value="Прибыл">Прибыл</option>
+        <option value="Принят">Принят</option>
+        <option value="Задержка">Задержка</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Комментарий</label>
+      <textarea id="fComment" rows="2" placeholder="Дополнительно..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Отмена</button>
+      <button class="btn btn-primary" onclick="saveRecord()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==== Демо-данные ====
+const DEMO = [
+  { id: 1, region: 'Сибирь', warehouse: 'Новосибирск-1', sku: 'ФБС-24.4.6', qty: 1200, shipped: 1200, shipDate: '2025-01-10', eta: '2025-01-18', status: 'Принят', comment: '' },
+  { id: 2, region: 'Урал', warehouse: 'Екатеринбург-2', sku: 'ФБС-24.5.6', qty: 800, shipped: 540, shipDate: '2025-01-14', eta: '2025-01-22', status: 'В пути', comment: 'Частичная отгрузка' },
+  { id: 3, region: 'Поволжье', warehouse: 'Казань-1', sku: 'ФБС-24.3.6', qty: 1500, shipped: 0, shipDate: '2025-01-20', eta: '2025-01-28', status: 'Ожидает', comment: '' },
+  { id: 4, region: 'Юг', warehouse: 'Ростов-1', sku: 'ФБС-24.6.6', qty: 600, shipped: 600, shipDate: '2025-01-08', eta: '2025-01-15', status: 'Принят', comment: '' },
+  { id: 5, region: 'Сибирь', warehouse: 'Красноярск-1', sku: 'ФБС-24.4.6', qty: 900, shipped: 200, shipDate: '2025-01-16', eta: '2025-01-26', status: 'Задержка', comment: 'Проблема на таможне' },
+  { id: 6, region: 'Дальний Восток', warehouse: 'Хабаровск-1', sku: 'ФБС-24.5.3', qty: 400, shipped: 380, shipDate: '2025-01-12', eta: '2025-01-25', status: 'В пути', comment: '' },
+];
+
+// ==== Состояние ====
+let data = [];
+let sortKey = 'id';
+let sortDir = 'asc';
+
+// Загрузка
+function load() {
+  const saved = localStorage.getItem('fbs_tracker_data');
+  data = saved ? JSON.parse(saved) : [...DEMO];
+  if (!saved) save();
+}
+function save() {
+  localStorage.setItem('fbs_tracker_data', JSON.stringify(data));
+}
+
+// ==== Отрисовка KPI ====
+function renderKPI() {
+  const total = data.length;
+  const totalQty = data.reduce((s, r) => s + r.qty, 0);
+  const totalShipped = data.reduce((s, r) => s + r.shipped, 0);
+  const progress = totalQty ? Math.round(totalShipped / totalQty * 100) : 0;
+  const delays = data.filter(r => r.status === 'Задержка').length;
+  const inTransit = data.filter(r => r.status === 'В пути').length;
+  const accepted = data.filter(r => r.status === 'Принят').length;
+
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi">
+      <div class="kpi-label">Всего отгрузок</div>
+      <div class="kpi-value">${total}</div>
+      <div class="kpi-sub">${inTransit} в пути · ${accepted} принято</div>
+    </div>
+    <div class="kpi success">
+      <div class="kpi-label">Общий прогресс</div>
+      <div class="kpi-value">${progress}%</div>
+      <div class="kpi-sub">${totalShipped.toLocaleString('ru')} / ${totalQty.toLocaleString('ru')} ед.</div>
+    </div>
+    <div class="kpi ${delays > 0 ? 'danger' : ''}">
+      <div class="kpi-label">Задержки</div>
+      <div class="kpi-value">${delays}</div>
+      <div class="kpi-sub">${delays ? 'требуют внимания' : 'всё по плану'}</div>
+    </div>
+    <div class="kpi warn">
+      <div class="kpi-label">В пути</div>
+      <div class="kpi-value">${inTransit}</div>
+      <div class="kpi-sub">активных поставок</div>
+    </div>
+  `;
+}
+
+// ==== Прогресс ====
+function getProgress(r) {
+  if (!r.qty) return 0;
+  return Math.min(100, Math.round(r.shipped / r.qty * 100));
+}
+function progressClass(p) {
+  if (p >= 100) return 'success';
+  if (p >= 60) return '';
+  if (p >= 30) return 'warn';
+  return 'danger';
+}
+
+// ==== Бейджи статусов ====
+function statusBadge(s) {
+  const map = {
+    'Ожидает': 'badge-gray',
+    'В пути': 'badge-blue',
+    'Прибыл': 'badge-yellow',
+    'Принят': 'badge-green',
+    'Задержка': 'badge-red',
+  };
+  return `<span class="badge ${map[s] || 'badge-gray'}">${s}</span>`;
+}
+
+// ==== Фильтрация ====
+function getFiltered() {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  const fs = document.getElementById('filterStatus').value;
+  const fw = document.getElementById('filterWarehouse').value;
+
+  let rows = data.filter(r => {
+    if (fs && r.status !== fs) return false;
+    if (fw && r.warehouse !== fw) return false;
+    if (q) {
+      const hay = `${r.warehouse} ${r.region} ${r.sku} ${r.id} ${r.comment}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    let va, vb;
+    if (sortKey === 'progress') { va = getProgress(a); vb = getProgress(b); }
+    else { va = a[sortKey]; vb = b[sortKey]; }
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+    if (va < vb) return sortDir === 'asc' ? -1 : 1;
+    if (va > vb) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  return rows;
+}
+
+// ==== Отрисовка таблицы ====
+function render() {
+  renderKPI();
+  renderWarehouseFilter();
+
+  const rows = getFiltered();
+  const tbody = document.getElementById('tableBody');
+  const empty = document.getElementById('emptyState');
+  const count = document.getElementById('countLabel');
+
+  count.textContent = `(${rows.length} из ${data.length})`;
+  tbody.innerHTML = '';
+
+  if (!rows.length) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  rows.forEach(r => {
+    const p = getProgress(r);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>#${r.id}</td>
+      <td><strong>${esc(r.warehouse)}</strong></td>
+      <td>${esc(r.region)}</td>
+      <td>${esc(r.sku)}</td>
+      <td>${r.qty.toLocaleString('ru')}</td>
+      <td>${r.shipped.toLocaleString('ru')}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="progress"><div class="progress-bar ${progressClass(p)}" style="width:${p}%"></div></div>
+          <span style="font-size:12px;color:#666;min-width:32px;">${p}%</span>
+        </div>
+      </td>
+      <td>${r.eta ? fmtDate(r.eta) : '—'}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td>
+        <div class="actions">
+          <button class="btn btn-ghost btn-sm" onclick="editRecord(${r.id})">✏</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteRecord(${r.id})">✕</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtDate(d) {
+  if (!d) return '—';
+  const [y,m,day] = d.split('-');
+  return `${day}.${m}.${y}`;
+}
+
+function renderWarehouseFilter() {
+  const sel = document.getElementById('filterWarehouse');
+  const cur = sel.value;
+  const whs = [...new Set(data.map(r => r.warehouse))].sort();
+  sel.innerHTML = '<option value="">Все склады</option>' + whs.map(w => `<option value="${esc(w)}">${esc(w)}</option>`).join('');
+  if (whs.includes(cur)) sel.value = cur;
+}
+
+// ==== Сортировка ====
+function sortBy(key) {
+  if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  else { sortKey = key; sortDir = 'asc'; }
+  render();
+}
+
+// ==== CRUD ====
+function openModal(id = null) {
+  document.getElementById('modalOverlay').classList.add('active');
+  const title = document.getElementById('modalTitle');
+  if (id) {
+    const r = data.find(x => x.id === id);
+    title.textContent = 'Редактировать отгрузку #' + id;
+    document.getElementById('editId').value = id;
+    document.getElementById('fRegion').value = r.region;
+    document.getElementById('fWarehouse').value = r.warehouse;
+    document.getElementById('fSku').value = r.sku;
+    document.getElementById('fQty').value = r.qty;
+    document.getElementById('fShipped').value = r.shipped;
+    document.getElementById('fShipDate').value = r.shipDate || '';
+    document.getElementById('fEta').value = r.eta || '';
+    document.getElementById('fStatus').value = r.status;
+    document.getElementById('fComment').value = r.comment || '';
+  } else {
+    title.textContent = 'Добавить отгрузку';
+    document.getElementById('editId').value = '';
+    ['fRegion','fWarehouse','fSku'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('fQty').value = '';
+    document.getElementById('fShipped').value = 0;
+    document.getElementById('fShipDate').value = '';
+    document.getElementById('fEta').value = '';
+    document.getElementById('fStatus').value = 'Ожидает';
+    document.getElementById('fComment').value = '';
+  }
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('active');
+}
+
+function saveRecord() {
+  const region = document.getElementById('fRegion').value.trim();
+  const warehouse = document.getElementById('fWarehouse').value.trim();
+  const sku = document.getElementById('fSku').value.trim();
+  const qty = parseInt(document.getElementById('fQty').value) || 0;
+  const shipped = parseInt(document.getElementById('fShipped').value) || 0;
+
+  if (!region || !warehouse || !sku || qty <= 0) {
+    alert('Заполните обязательные поля (Регион, Склад, SKU, Кол-во > 0)');
+    return;
+  }
+
+  const rec = {
+    region, warehouse, sku, qty, shipped,
+    shipDate: document.getElementById('fShipDate').value || '',
+    eta: document.getElementById('fEta').value || '',
+    status: document.getElementById('fStatus').value,
+    comment: document.getElementById('fComment').value.trim(),
+  };
+
+  const id = document.getElementById('editId').value;
+  if (id) {
+    const idx = data.findIndex(x => x.id === +id);
+    data[idx] = { ...data[idx], ...rec };
+  } else {
+    const newId = data.length ? Math.max(...data.map(x => x.id)) + 1 : 1;
+    data.push({ id: newId, ...rec });
+  }
+  save();
+  closeModal();
+  render();
+}
+
+function editRecord(id) { openModal(id); }
+
+function deleteRecord(id) {
+  if (!confirm('Удалить отгрузку #' + id + '?')) return;
+  data = data.filter(x => x.id !== id);
+  save();
+  render();
+}
+
+// ==== Фильтры ====
+function resetFilters() {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('filterStatus').value = '';
+  document.getElementById('filterWarehouse').value = '';
+  render();
+}
+
+// ==== Экспорт CSV ====
+function exportCSV() {
+  const rows = getFiltered();
+  const header = ['ID','Регион','Склад','SKU','План','Отгружено','Прогресс %','Дата отгрузки','ETA','Статус','Комментарий'];
+  const lines = [header.join(';')];
+  rows.forEach(r => {
+    lines.push([
+      r.id, r.region, r.warehouse, r.sku, r.qty, r.shipped,
+      getProgress(r), r.shipDate, r.eta, r.status,
+      (r.comment || '').replace(/;/g, ',')
+    ].join(';'));
+  });
+  const csv = '\uFEFF' + lines.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `fbs_tracking_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// ==== Инициализация ====
+document.getElementById('searchInput').addEventListener('input', render);
+document.getElementById('filterStatus').addEventListener('change', render);
+document.getElementById('filterWarehouse').addEventListener('change', render);
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target.id === 'modalOverlay') closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+load();
+render();
+</script>
+</body>
+</html>
